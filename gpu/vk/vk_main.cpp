@@ -217,7 +217,12 @@ bool create_device() {
     dev.coop_matrix = dev.coop_matrix && coop.cooperativeMatrix;
     // (only null descriptors, unbound slots; RX_VK_ROBUST=1: bounds-checked buffer access too, out-of-range
     // accesses dropped instead of faulting the device)
-    static const bool robust = getenv("RX_VK_ROBUST") && atoi(getenv("RX_VK_ROBUST"));
+    // (hookshot, Intel) Intel's Windows Vulkan driver faults the device on an out-of-range buffer access that
+    // NVIDIA's tolerates silently (device lost on a draw, then the game waits on a fence that never completes:
+    // the freeze just after the intro). Bounds-checked access turns that into the defined read of zero, so it
+    // is on by default where the vendor is Intel. RX_VK_ROBUST=0: off; RX_VK_ROBUST=1: on for every vendor
+    static const char* robust_env = getenv("RX_VK_ROBUST");
+    static const bool robust = robust_env ? atoi(robust_env) != 0 : dev.props.vendorID == 0x8086;
     const bool robust_ok = robust && robust2.robustBufferAccess2 && f.features.robustBufferAccess;
     robust2.robustBufferAccess2 = robust_ok ? VK_TRUE : VK_FALSE;
     robust2.robustImageAccess2 = VK_FALSE;
