@@ -237,7 +237,13 @@ bool create_device() {
     static const bool robust = robust_env ? atoi(robust_env) != 0 : dev.props.vendorID == 0x8086;
     const bool robust_ok = robust && robust2.robustBufferAccess2 && f.features.robustBufferAccess;
     robust2.robustBufferAccess2 = robust_ok ? VK_TRUE : VK_FALSE;
-    robust2.robustImageAccess2 = VK_FALSE;
+    // (an out-of-range image access faults the device the same way a buffer one does, and buffer bounds-checking does
+    // not cover it: a compute dispatch was the first thing Intel's driver took down once buffers were bounded, so the
+    // images are bounded too where the feature exists. RX_VK_ROBUST_IMG=0: off)
+    static const bool robust_img_env = !(getenv("RX_VK_ROBUST_IMG") && atoi(getenv("RX_VK_ROBUST_IMG")) == 0);
+    const bool robust_img = robust && robust_img_env && robust2.robustImageAccess2;
+    robust2.robustImageAccess2 = robust_img ? VK_TRUE : VK_FALSE;
+    if (robust) logf("vk: robust image access %s", robust_img ? "on" : "not supported");
     dev.null_descriptor = dev.null_descriptor && robust2.nullDescriptor;
     pv.transformFeedbackPreservesProvokingVertex = VK_FALSE;
     dev.provoking_vertex = dev.provoking_vertex && pv.provokingVertexLast;
