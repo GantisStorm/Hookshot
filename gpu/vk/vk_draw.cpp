@@ -1051,6 +1051,17 @@ struct BankCache {
 };
 thread_local BankCache bank_cache[2][kNvnStages];   // [c0 or c2][NVN stage]: the last upload (draws in a row share most of it)
 
+// (hookshot) RX_VK_WHOLE_BUFFERS=1: every buffer is bound for the length of its object instead of the range the binding
+// declares. Bounds-checked access compares against the descriptor's range, so a range computed too small turns the
+// shader's reads into zeros — stretched triangles and white geometry rather than a fault. With the whole object bound,
+// only accesses past the object itself are dropped: if the picture comes out right this way, a range is being
+// under-computed and the fix belongs where it is computed, not in robustness.
+static bool whole_buffers() {
+    static const char* e = getenv("RX_VK_WHOLE_BUFFERS");
+    static const bool v = e ? atoi(e) != 0 : dev.props.vendorID == 0x8086;
+    return v;
+}
+
 VkDescriptorBufferInfo uniform_range(const NvnState& s, const Stage& st, uint32_t index) {
     VkDescriptorBufferInfo bi{VK_NULL_HANDLE, 0, VK_WHOLE_SIZE};
     const uint64_t align = std::max<uint64_t>(dev.props.limits.minUniformBufferOffsetAlignment, 16);
@@ -1280,7 +1291,9 @@ void build_descriptors(const NvnState& s, const Program& p) {
             const size_t first = dw.bufs.size();
             for (uint32_t k = 0; k < d.count; k++) {
                 const auto t0 = std::chrono::steady_clock::now();
-                dw.bufs.push_back(uniform_range(s, st, d.index + k));
+                VkDescriptorBufferInfo ub = uniform_range(s, st, d.index + k);
+                if (whole_buffers() && ub.buffer && ub.range != VK_WHOLE_SIZE) ub.range = VK_WHOLE_SIZE;
+                dw.bufs.push_back(ub);
                 slow_descriptor(t0, "uniform buffer", d.index + k, dw.bufs.back().range);
             }
             w.pBufferInfo = &dw.bufs[first];
@@ -1358,7 +1371,7 @@ void build_descriptors(const NvnState& s, const Program& p) {
                              "%#llx%s", (unsigned long long)p.key, ns, (unsigned)d.cbuf_index, off,
                              (unsigned long long)addr, (unsigned long long)size, d.is_written ? " (written)" : "");
                 }
-                dw.bufs.push_back(b ? VkDescriptorBufferInfo{b.buffer, b.offset, n}
+                dw.bufs.push_back(b ? VkDescriptorBufferInfo{b.buffer, b.offset, whole_buffers() ? VK_WHOLE_SIZE : n}
                                     : VkDescriptorBufferInfo{dev.null_descriptor ? VK_NULL_HANDLE : zero_buffer, 0,
                                                              dev.null_descriptor ? VK_WHOLE_SIZE : 16});
                 {   // (RX_VK_LOG_WRITTEN=1: every storage buffer range a program writes, once, 300 of them)
