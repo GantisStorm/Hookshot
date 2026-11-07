@@ -161,6 +161,18 @@ bool create_device() {
         optional(VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME, dev.checkpoints);
     optional(VK_EXT_DEVICE_FAULT_EXTENSION_NAME, dev.device_fault);
     optional(VK_KHR_COOPERATIVE_MATRIX_EXTENSION_NAME, dev.coop_matrix);
+    // (hookshot) A driver can report a feature and still render wrongly with it (Intel's Windows one does, at least for
+    // the filter in vk_framegen.cpp). Each switch turns one off after it was found, so a wrong picture can be bisected
+    // one feature at a time; the extension stays enabled, only its use stops.
+    if (getenv("RX_VK_NO_BORDER")) dev.custom_border_color = false;
+    if (getenv("RX_VK_NO_PROVOKING")) dev.provoking_vertex = false;
+    if (getenv("RX_VK_NO_CLIP_CONTROL")) dev.depth_clip_control = false;
+    if (getenv("RX_VK_NO_DYNAMIC3")) dev.dynamic_state3 = false;
+    if (getenv("RX_VK_NO_INDEX8")) dev.index_uint8 = false;
+    if (getenv("RX_VK_NO_CONDITIONAL")) dev.conditional_rendering = false;
+    if (getenv("RX_VK_NO_STENCIL_EXPORT")) dev.stencil_export = false;
+    if (getenv("RX_VK_NO_DIVISOR")) dev.vertex_divisor = false;
+    if (getenv("RX_VK_NO_VIEW2D3D")) dev.view_2d_of_3d = false;
 
     // the queue: one family for graphics, compute and transfer
     vkGetPhysicalDeviceQueueFamilyProperties(dev.physical, &n, nullptr);

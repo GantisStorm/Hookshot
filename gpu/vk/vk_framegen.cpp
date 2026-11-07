@@ -319,7 +319,8 @@ VkImage framegen_scale(VkCommandBuffer cmd, VkImageView src, VkImage image, uint
     // plain blit below shows the frame: until that pass is fixed there, the blit is used even when the menu asks for
     // Catmull-Rom or Lanczos (RX_VK_ROBUST on is what turned the fault into black output, not the fault itself)
     static const bool intel = dev.props.vendorID == 0x8086;
-    if (intel) {
+    static const bool force = getenv("RX_VK_UPSCALE_FORCE") && atoi(getenv("RX_VK_UPSCALE_FORCE"));
+    if (intel && !force) {
         static bool told = false;
         if (!told) told = true, logf("vk: upscaling and sharpness use the plain blit on Intel (the filter's output is black here)");
         return VK_NULL_HANDLE;
@@ -356,6 +357,15 @@ VkImage framegen_scale(VkCommandBuffer cmd, VkImageView src, VkImage image, uint
         if (!make_img(fg.scaled, dw, dh, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT)) return VK_NULL_HANDLE;
         fg.scaled_w = dw, fg.scaled_h = dh;
         to_general(cmd, fg.scaled.image);
+    }
+    // (RX_VK_UPSCALE_PROBE=1: what the filter was asked for, the first few times; with RX_VK_UPSCALE_FORCE=1 it runs
+    // on Intel too, where its output is black, to compare against the plain blit)
+    static const bool probe = getenv("RX_VK_UPSCALE_PROBE") != nullptr;
+    if (probe) {
+        static int n = 0;
+        if (n++ < 8)
+            logf("vk: upscale dispatch %ux%u from %ux%u (mode %d, sharp %.2f, src %ux%u)", dw, dh, fg.scaled_w, fg.scaled_h,
+                 opts.upscale, opts.sharpness / 100.0f, sw, sh);
     }
     const struct { int mode; float sharp; } pc{opts.upscale, opts.sharpness / 100.0f};
     pass(cmd, fg.scale, {{src, fg.linear}, {fg.scaled.view, VK_NULL_HANDLE}}, dw, dh, &pc, sizeof pc);
