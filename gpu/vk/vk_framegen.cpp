@@ -315,6 +315,15 @@ bool framegen_on() {
 VkImage framegen_scale(VkCommandBuffer cmd, VkImageView src, VkImage image, uint32_t sw, uint32_t sh, const int crop[4], uint32_t dw, uint32_t dh) {
     if (!opts.upscale && !opts.sharpness) return VK_NULL_HANDLE;
     if (!src || !fg.scale.pipe) return VK_NULL_HANDLE;
+    // (hookshot, Intel) the filter's compute pass leaves the window black on Intel's Windows Vulkan driver, while the
+    // plain blit below shows the frame: until that pass is fixed there, the blit is used even when the menu asks for
+    // Catmull-Rom or Lanczos (RX_VK_ROBUST on is what turned the fault into black output, not the fault itself)
+    static const bool intel = dev.props.vendorID == 0x8086;
+    if (intel) {
+        static bool told = false;
+        if (!told) told = true, logf("vk: upscaling and sharpness use the plain blit on Intel (the filter's output is black here)");
+        return VK_NULL_HANDLE;
+    }
     // (the game draws into part of its window textures, 2048 x 1152 of 2560 x 1440 here: the filter was given the whole texture, and the
     // picture came out in the top left corner of the window with black around it. The crop first, then the filter)
     if (crop && crop[2] > 0 && crop[3] > 0 && (crop[0] || crop[1] || (uint32_t)crop[2] < sw || (uint32_t)crop[3] < sh)) {
